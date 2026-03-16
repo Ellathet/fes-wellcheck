@@ -1,11 +1,32 @@
 {
-  "name": "sdk",
+  "name": "@wellcheck/sdk",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
-    "dev": "echo 'Add dev script here'",
-    "build": "echo 'Add build script here'",
-    "test": "echo 'Add test script here'",
-    "lint": "echo 'Add lint script here'"
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@wellcheck/typescript-config": "workspace:*",
+    "axios-mock-adapter": "^2.1.0",
+    "typescript": "5.9.2",
+    "vitest": "^3.0.0"
   }
 }

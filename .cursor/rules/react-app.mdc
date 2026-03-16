@@ -10,18 +10,25 @@ The web app lets users connect to a Sisense instance, select dashboards/widgets,
 
 ## Stack
 
-- **Vite** React, TypeScript
-- **SDK** consumed from `packages/sdk` — never call Sisense API directly from app code
-- UI components from `packages/ui`
+- **Vite** + React 19, TypeScript (`@wellcheck/web`)
+- **SDK** consumed from `@wellcheck/sdk` — never call Sisense API directly from app code
+- UI: shadcn/ui components (see `shadcn-ui.mdc`)
+- Tests: Vitest + Testing Library (jsdom)
 
-## Key Pages / Features
+## Key Routes (React Router)
 
 | Route | Purpose |
 |---|---|
 | `/` | Connection setup (base URL + API token) |
 | `/dashboards` | List and select dashboards |
-| `/dashboards/[id]` | List widgets, trigger analysis |
-| `/dashboards/[id]/results` | Show ESLint wellcheck results per widget |
+| `/dashboards/:id` | List widgets, trigger analysis |
+| `/dashboards/:id/results` | Show ESLint wellcheck results per widget |
+
+## Conventions
+
+- Group by feature: `src/dashboards/`, `src/connection/` — not by type.
+- Keep data-fetching in custom hooks, not inline in components.
+- Never store Sisense API tokens in component state — use a context/store or env vars.
 
 ## Displaying Results
 

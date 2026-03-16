@@ -1,0 +1,10 @@
+{
+  "extends": "@wellcheck/typescript-config/node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.build.tsbuildinfo",
+    "outDir": "./dist",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["**/*.test.ts", "tests"]
+}

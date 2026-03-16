@@ -1,0 +1,48 @@
+---
+description: Conventions for the packages/sdk Sisense API client
+globs: packages/sdk/**
+alwaysApply: false
+---
+
+# Sisense SDK Package
+
+`packages/sdk` is the Sisense API client. All API communication lives here; no other package should call the Sisense API directly.
+
+## Stack
+
+- HTTP client: **axios**
+- Language: **TypeScript**
+- Tests: **Vitest** + `axios-mock-adapter` (or `msw`) for network mocking
+
+## Module Structure
+
+```
+packages/sdk/src/
+  client.ts          # Axios instance factory (baseURL, auth headers)
+  dashboards.ts      # Dashboard endpoints
+  widgets.ts         # Widget endpoints
+  types.ts           # Shared Sisense domain types
+  index.ts           # Public exports
+```
+
+## Conventions
+
+- Accept `SisenseConfig` (baseUrl, token) when creating the client; never hard-code URLs.
+- Return typed response objects — never expose raw `AxiosResponse`.
+- Throw a typed `SisenseApiError` on non-2xx responses with `status`, `message`, and `endpoint`.
+- All public functions must be async and return `Promise<T>`.
+
+## Example
+
+```typescript
+// ✅ GOOD
+export async function getDashboards(client: SisenseClient): Promise<Dashboard[]> {
+  const { data } = await client.get<Dashboard[]>('/api/v1/dashboards');
+  return data;
+}
+
+// ❌ BAD — leaking AxiosResponse, no error handling
+export async function getDashboards(client: AxiosInstance) {
+  return client.get('/api/v1/dashboards');
+}
+```

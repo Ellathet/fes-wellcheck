@@ -1,0 +1,32 @@
+---
+description: React app conventions for apps/web (dashboard selector + results viewer)
+globs: apps/web/**
+alwaysApply: false
+---
+
+# React App — `apps/web`
+
+The web app lets users connect to a Sisense instance, select dashboards/widgets, run wellcheck analysis, and view results.
+
+## Stack
+
+- **Vite** React, TypeScript
+- **SDK** consumed from `packages/sdk` — never call Sisense API directly from app code
+- UI components from `packages/ui`
+
+## Key Pages / Features
+
+| Route | Purpose |
+|---|---|
+| `/` | Connection setup (base URL + API token) |
+| `/dashboards` | List and select dashboards |
+| `/dashboards/[id]` | List widgets, trigger analysis |
+| `/dashboards/[id]/results` | Show ESLint wellcheck results per widget |
+
+## Displaying Results
+
+Each wellcheck violation should show:
+- Rule name (`no-metadata-override-in-script`)
+- Severity (`error` | `warning`)
+- Line number and relevant code snippet
+- A short human-readable description of the problem

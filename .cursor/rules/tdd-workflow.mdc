@@ -1,0 +1,45 @@
+---
+description: Test-Driven Development workflow — always write tests first
+alwaysApply: true
+---
+
+# Test-Driven Development
+
+**Always write the test before the implementation.**
+
+## Cycle
+
+1. Write a failing test that describes the expected behaviour.
+2. Write the minimum code to make the test pass.
+3. Refactor while keeping tests green.
+
+## File Conventions
+
+| Source file | Test file |
+|---|---|
+| `src/foo.ts` | `src/foo.test.ts` |
+| `src/bar/index.ts` | `src/bar/index.test.ts` |
+
+## What to Test
+
+- **SDK**: every API method, error paths, and edge cases (network errors, bad payloads).
+- **ESLint rules/checks**: one test per wellcheck rule, using fixture scripts that should pass and ones that should fail.
+- **React components**: behaviour (user interactions, data display), not implementation details.
+
+## Example
+
+```typescript
+// ❌ BAD — implementation before test
+export function getWidgetType(widget: Widget) { ... }
+
+// ✅ GOOD — test first
+it('returns the widget type from the widget definition', () => {
+  const widget = { type: 'chart' };
+  expect(getWidgetType(widget)).toBe('chart');
+});
+// then write getWidgetType
+```
+
+## Tooling
+
+Use **Vitest** for unit/integration tests. Do not skip writing tests for "simple" utilities.

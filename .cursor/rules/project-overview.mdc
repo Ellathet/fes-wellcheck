@@ -1,0 +1,30 @@
+---
+description: Project overview, monorepo structure, and domain context
+alwaysApply: true
+---
+
+# Wellcheck Utils — Project Overview
+
+This tool analyses Sisense dashboard widget scripts for quality issues (wellchecks), fetches them via the Sisense API, and surfaces problems in a React UI.
+
+## Monorepo Layout (Turborepo + pnpm)
+
+```
+apps/
+  web/          # React/Vite UI — dashboard selector + ESLint results viewer
+packages/
+  sdk/          # Sisense API client (axios-based)
+```
+
+## Domain Vocabulary
+
+- **Dashboard** — a Sisense dashboard containing one or more widgets.
+- **Widget** — a visual element with an optional JavaScript script attached.
+- **Widget type** — e.g. `chart`, `pivot`, `indicator`, `richtext`. Scripts must target the correct type.
+- **Wellcheck** — an automated check that flags quality issues in widget scripts.
+
+## Package Manager & Build
+
+- Package manager: `pnpm` (workspace defined in `pnpm-workspace.yaml`)
+- Build orchestration: `turbo run build / dev / lint / check-types`
+- TypeScript 5.x, Node >= 18

@@ -1,0 +1,52 @@
+---
+description: shadcn/ui component conventions for the project
+globs: apps/web/**,packages/ui/**
+alwaysApply: false
+---
+
+# shadcn/ui Components
+
+Use **shadcn/ui** as the primary component library. Components are copied into the repo (not imported from a package) and live in `packages/ui/src/components/ui/`.
+
+## Adding Components
+
+Always use the CLI — never copy-paste manually:
+
+```bash
+pnpm dlx shadcn@latest add <component> --cwd apps/web
+```
+
+Components are added to `apps/web/components/ui/` and should then be moved/re-exported from `packages/ui` if shared across apps.
+
+## Usage Rules
+
+- **Prefer shadcn components** over custom HTML elements for all standard UI patterns (buttons, inputs, dialogs, badges, tables, etc.).
+- **Do not modify** files inside `components/ui/` directly — extend behaviour by wrapping, not editing generated code.
+- Wrap shadcn primitives in a named component when you need to add project-specific props or defaults:
+
+```tsx
+// ❌ BAD — using raw shadcn Button with repeated variants everywhere
+<Button variant="destructive" size="sm">Delete</Button>
+
+// ✅ GOOD — wrap with project-specific defaults
+export function DeleteButton({ children, ...props }: ButtonProps) {
+  return <Button variant="destructive" size="sm" {...props}>{children}</Button>;
+}
+```
+
+## Theming
+
+- Configure design tokens in `apps/web/app/globals.css` using CSS variables (the shadcn default approach).
+- Do not hard-code colours — always use the CSS variable tokens (e.g. `bg-primary`, `text-muted-foreground`).
+
+## Components to Use per Feature
+
+| UI Need | shadcn Component |
+|---|---|
+| Dashboard / widget list | `Table`, `Badge` |
+| Dashboard selector dropdown | `Select` or `Combobox` |
+| Connection config form | `Input`, `Label`, `Button` |
+| Wellcheck results | `Card`, `Badge`, `ScrollArea` |
+| Error / warning indicators | `Alert`, `Badge` (variant) |
+| Loading state | `Skeleton` |
+| Code snippet display | wrap `pre` inside a `Card` |

@@ -1,0 +1,49 @@
+---
+description: Wellcheck analysis rules — what to detect in Sisense widget scripts
+alwaysApply: true
+---
+
+# Wellcheck Analysis Rules
+
+These are the quality checks that must be detected when analysing widget scripts fetched from Sisense. Implement each as a named ESLint rule inside `packages/eslint-config` (or a dedicated `packages/wellcheck-rules` package).
+
+## Checks
+
+### 1. `no-wrong-widget-type`
+Scripts applied to a widget must be compatible with that widget's type.
+
+- A script using `widget.type === 'chart'` APIs should not be applied to a `pivot` or `indicator`.
+- **Flag**: script references APIs or properties that only exist on a different widget type.
+
+### 2. `no-unimpactful-code`
+Widget scripts must not contain code that has no observable effect.
+
+Detect:
+- Variables declared but never used.
+- Assignments to variables that are never read.
+- Expressions whose return value is discarded (e.g. `array.map(...)` result thrown away).
+- Empty `if/else` branches.
+
+### 3. `no-metadata-override-in-script`
+Widget scripts must not modify dashboard/panel metadata that should be controlled through the Sisense panel UI.
+
+Detect writes to:
+- `widget.metadata`
+- `widget.options` (structural options, not style)
+- `widget.rawQuery` / `widget.query`
+- `panel.*` properties from within a widget script
+
+```javascript
+// ❌ BAD — overriding metadata in a script
+widget.metadata.panels[0].items = [];
+
+// ✅ GOOD — purely visual/data manipulation
+args.result.forEach(row => { row.color = '#ff0000'; });
+```
+
+## Adding a New Check
+
+1. Write a failing test with fixture scripts (pass/fail cases).
+2. Implement the ESLint rule.
+3. Export it from the package index.
+4. Document the check here.

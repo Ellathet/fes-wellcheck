@@ -11,6 +11,12 @@ const dashboardFixture: Dashboard = {
   title: 'Sales Overview',
 };
 
+const dashboardWithScriptFixture: Dashboard = {
+  oid: 'dash-script',
+  title: 'Scripted Dashboard',
+  script: 'dashboard.on("widgetloaded", function(e, widget) { widget.title = "override"; });',
+};
+
 const dashboardWithWidgetsFixture: Dashboard = {
   oid: 'dash-2',
   title: 'Marketing',
@@ -95,6 +101,26 @@ describe('getDashboard', () => {
     const result = await getDashboard(client, 'dash-1');
 
     expect(result).toEqual(dashboardFixture);
+  });
+
+  it('returns undefined script when the dashboard has no script', async () => {
+    const client = createClient(config);
+    const adapter = new MockAdapter(client);
+    adapter.onGet('/api/v1/dashboards/dash-1').reply(200, dashboardFixture);
+
+    const result = await getDashboard(client, 'dash-1');
+
+    expect(result.script).toBeUndefined();
+  });
+
+  it('returns the dashboard script when present', async () => {
+    const client = createClient(config);
+    const adapter = new MockAdapter(client);
+    adapter.onGet('/api/v1/dashboards/dash-script').reply(200, dashboardWithScriptFixture);
+
+    const result = await getDashboard(client, 'dash-script');
+
+    expect(result.script).toBe(dashboardWithScriptFixture.script);
   });
 
   it('includes widgets when the dashboard has them', async () => {

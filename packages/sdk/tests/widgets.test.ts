@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import MockAdapter from 'axios-mock-adapter';
 import { createClient } from '../src/client.js';
 import { getWidgets, getWidget } from '../src/widgets.js';
-import { SisenseApiError, type Widget } from '../src/types.js';
+import { type Widget } from '../src/types.js';
 
 const config = { baseUrl: 'https://sisense.example.com', token: 'test-token' };
 

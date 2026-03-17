@@ -6,6 +6,7 @@ export interface SisenseConfig {
 export interface Dashboard {
   oid: string;
   title: string;
+  script?: string;
   widgets?: Widget[];
 }
 

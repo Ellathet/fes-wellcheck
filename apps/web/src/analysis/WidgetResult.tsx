@@ -1,0 +1,164 @@
+import { useState } from 'react';
+import type { WidgetAnalysisResult, ScriptAnalysisResult, WellcheckViolation } from '@/lib/analyze';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { CodeBlock, InlineCode } from '@/components/ui/code-block';
+import { Separator } from '@/components/ui/separator';
+import {
+  AlertTriangle,
+  XCircle,
+  CheckCircle2,
+  Code2,
+  FileCode2,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
+
+const RULE_LABELS: Record<WellcheckViolation['rule'], string> = {
+  'no-wrong-widget-type': 'Wrong widget type',
+  'no-unimpactful-code': 'Unimpactful code',
+  'no-metadata-override-in-script': 'Metadata override',
+};
+
+function ViolationRow({ violation }: { violation: WellcheckViolation }) {
+  const isError = violation.severity === 'error';
+  return (
+    <Alert variant={isError ? 'destructive' : 'warning'} className="py-3">
+      {isError ? <XCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+      <AlertDescription className="pl-1">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <Badge variant={isError ? 'destructive' : 'warning'} className="font-mono text-[10px]">
+            {RULE_LABELS[violation.rule]}
+          </Badge>
+          {violation.line !== undefined && (
+            <span className="text-xs text-muted-foreground">line {violation.line}</span>
+          )}
+        </div>
+        <p className="text-sm">{violation.message}</p>
+        {violation.snippet && <InlineCode>{violation.snippet}</InlineCode>}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function ScriptCard({
+  icon,
+  title,
+  badge,
+  script,
+  violations,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  badge?: React.ReactNode;
+  script: string;
+  violations: WellcheckViolation[];
+}) {
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const errors = violations.filter((v) => v.severity === 'error').length;
+  const warnings = violations.filter((v) => v.severity === 'warning').length;
+  const clean = violations.length === 0;
+
+  // Lines flagged by any violation — used to highlight them in the code view
+  const flaggedLines = violations.flatMap((v) => (v.line !== undefined ? [v.line] : []));
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {icon}
+            <CardTitle className="text-sm font-medium truncate">{title}</CardTitle>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {badge}
+            {clean ? (
+              <Badge variant="success" className="gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                Clean
+              </Badge>
+            ) : (
+              <>
+                {errors > 0 && (
+                  <Badge variant="destructive">
+                    {errors} error{errors !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+                {warnings > 0 && (
+                  <Badge variant="warning">
+                    {warnings} warning{warnings !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pt-0 space-y-2">
+        {/* Violations */}
+        {!clean && (
+          <>
+            {violations.map((violation, i) => (
+              <ViolationRow key={i} violation={violation} />
+            ))}
+            <Separator className="my-1" />
+          </>
+        )}
+
+        {/* Collapsible syntax-highlighted script */}
+        <Collapsible open={scriptOpen} onOpenChange={setScriptOpen}>
+          <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors select-none w-full text-left">
+            {scriptOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            )}
+            {scriptOpen ? 'Hide script' : 'Show script'}
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <CodeBlock
+              code={script}
+              highlightLines={flaggedLines}
+              data-testid="script-content"
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function DashboardScriptResult({ result }: { result: ScriptAnalysisResult }) {
+  return (
+    <ScriptCard
+      icon={<FileCode2 className="h-4 w-4 text-muted-foreground shrink-0" />}
+      title="Dashboard script"
+      badge={
+        <Badge variant="outline" className="font-mono text-[10px]">
+          dashboard
+        </Badge>
+      }
+      script={result.script}
+      violations={result.violations}
+    />
+  );
+}
+
+export function WidgetResult({ result }: { result: WidgetAnalysisResult }) {
+  return (
+    <ScriptCard
+      icon={<Code2 className="h-4 w-4 text-muted-foreground shrink-0" />}
+      title={result.widgetTitle}
+      badge={
+        <Badge variant="secondary" className="font-mono text-[10px]">
+          {result.widgetType}
+        </Badge>
+      }
+      script={result.script}
+      violations={result.violations}
+    />
+  );
+}

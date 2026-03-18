@@ -10,6 +10,9 @@ import {
 import { createClient, getDashboards } from '@wellcheck/sdk';
 import type { Dashboard, SisenseConfig } from '@wellcheck/sdk';
 import { parseDashboardFiles, type DashboardParseError } from '@/lib/parseDashboard';
+import { type AiConfig, type AiProvider, DEFAULT_MODEL } from '@/lib/aiAnalyze';
+
+export type { AiConfig, AiProvider };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +43,10 @@ export interface ConnectionContextValue {
   selectAll: () => void;
   clearAll: () => void;
 
+  // AI configuration
+  aiConfig: AiConfig;
+  setAiConfig: (patch: Partial<AiConfig>) => void;
+
   // Actions
   connect: () => Promise<void>;
   loadFromFiles: (files: File[]) => Promise<DashboardParseError[]>;
@@ -60,6 +67,23 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [selectedOids, setSelectedOids] = useState<Set<string>>(new Set());
+  const [aiConfig, setAiConfigState] = useState<AiConfig>({
+    enabled: false,
+    provider: 'openai',
+    model: DEFAULT_MODEL['openai'],
+    apiKey: '',
+  });
+
+  const setAiConfig = useCallback((patch: Partial<AiConfig>) => {
+    setAiConfigState((prev) => {
+      const next = { ...prev, ...patch };
+      // When provider changes, reset model to that provider's default
+      if (patch.provider && patch.provider !== prev.provider) {
+        next.model = DEFAULT_MODEL[patch.provider];
+      }
+      return next;
+    });
+  }, []);
 
   const configRef = useRef<SisenseConfig>({ baseUrl, token });
   configRef.current = { baseUrl: baseUrl.trim(), token: token.trim() };
@@ -151,6 +175,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       dashboards, connectionStatus, connectionError,
       selectedOids, selectedDashboards,
       toggleOid, selectAll, clearAll,
+      aiConfig, setAiConfig,
       connect, loadFromFiles, reset,
     }),
     [
@@ -158,6 +183,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       dashboards, connectionStatus, connectionError,
       selectedOids, selectedDashboards,
       toggleOid, selectAll, clearAll,
+      aiConfig, setAiConfig,
       connect, loadFromFiles, reset,
     ],
   );

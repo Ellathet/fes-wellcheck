@@ -13,4 +13,20 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Split vendor code into separate chunks so the main bundle stays lean
+        manualChunks(id: string) {
+          if (
+            id.includes('@langchain/core') ||
+            id.includes('@langchain/openai') ||
+            id.includes('@langchain/google-genai')
+          ) return 'vendor-langchain';
+          if (id.includes('react-syntax-highlighter')) return 'vendor-highlight';
+          if (id.includes('/acorn')) return 'vendor-acorn';
+        },
+      },
+    },
+  },
 });

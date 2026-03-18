@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { DashboardList } from './DashboardList';
+import { AiSettings } from './AiSettings';
 import { useConnection } from './ConnectionContext';
 import {
   ShieldCheck, AlertCircle, ArrowRight, Loader2,
@@ -301,6 +302,9 @@ export function ConnectionPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* AI Settings — always visible below the main card */}
+        <AiSettings />
 
         {/* Analyse button — shared between both modes */}
         {isConnected && selectedDashboards.length > 0 && (

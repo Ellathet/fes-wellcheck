@@ -10,7 +10,8 @@ const alertVariants = cva(
         default: 'bg-background text-foreground',
         destructive:
           'border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive',
-        warning: 'border-yellow-500/50 text-yellow-700 [&>svg]:text-yellow-600',
+        /* Lime Zest (#D7F77D) warning — official Sisense secondary colour */
+        warning: 'border-[hsl(76,88%,60%)] bg-[hsl(76,88%,95%)] text-[hsl(76,60%,25%)] [&>svg]:text-[hsl(76,60%,35%)] dark:border-[hsl(76,88%,40%)] dark:bg-[hsl(76,60%,15%)] dark:text-[hsl(76,88%,75%)] dark:[&>svg]:text-[hsl(76,88%,65%)]',
       },
     },
     defaultVariants: {

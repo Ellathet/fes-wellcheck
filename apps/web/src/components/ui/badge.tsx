@@ -13,8 +13,10 @@ const badgeVariants = cva(
         destructive:
           'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
         outline: 'text-foreground',
-        warning: 'border-transparent bg-yellow-100 text-yellow-800',
-        success: 'border-transparent bg-green-100 text-green-800',
+        /* Lime Zest (#D7F77D) for warnings — official Sisense secondary colour */
+        warning: 'border-transparent bg-[hsl(76,88%,88%)] text-[hsl(76,60%,28%)] dark:bg-[hsl(76,60%,20%)] dark:text-[hsl(76,88%,73%)]',
+        /* Seabyte (#94F5F0) tint for success */
+        success: 'border-transparent bg-[hsl(177,83%,88%)] text-[hsl(177,60%,24%)] dark:bg-[hsl(177,50%,18%)] dark:text-[hsl(177,83%,70%)]',
       },
     },
     defaultVariants: {

@@ -28,7 +28,31 @@ function renderPage() {
   );
 }
 
-describe('ConnectionPage — connection form', () => {
+describe('ConnectionPage — mode tabs', () => {
+  it('shows the API form by default', () => {
+    renderPage();
+    expect(screen.getByLabelText(/sisense url/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/api token/i)).toBeInTheDocument();
+  });
+
+  it('switches to the file upload tab', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /upload files/i }));
+    expect(screen.queryByLabelText(/sisense url/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/drop files here/i)).toBeInTheDocument();
+  });
+
+  it('switches back to the API tab', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /upload files/i }));
+    await user.click(screen.getByRole('button', { name: /connect via api/i }));
+    expect(screen.getByLabelText(/sisense url/i)).toBeInTheDocument();
+  });
+});
+
+describe('ConnectionPage — connection form (API mode)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -41,7 +65,7 @@ describe('ConnectionPage — connection form', () => {
 
   it('disables the submit button when inputs are empty', () => {
     renderPage();
-    expect(screen.getByRole('button', { name: /connect/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /connect & fetch/i })).toBeDisabled();
   });
 
   it('enables the submit button when both inputs are filled', async () => {
@@ -49,11 +73,11 @@ describe('ConnectionPage — connection form', () => {
     renderPage();
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'my-token');
-    expect(screen.getByRole('button', { name: /connect/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /connect & fetch/i })).toBeEnabled();
   });
 });
 
-describe('ConnectionPage — dashboard list', () => {
+describe('ConnectionPage — dashboard list (API mode)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -66,7 +90,7 @@ describe('ConnectionPage — dashboard list', () => {
     renderPage();
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'token');
-    await user.click(screen.getByRole('button', { name: /connect/i }));
+    await user.click(screen.getByRole('button', { name: /connect & fetch/i }));
     expect(screen.getByTestId('dashboard-list-loading')).toBeInTheDocument();
   });
 
@@ -76,7 +100,7 @@ describe('ConnectionPage — dashboard list', () => {
     renderPage();
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'token');
-    await user.click(screen.getByRole('button', { name: /connect/i }));
+    await user.click(screen.getByRole('button', { name: /connect & fetch/i }));
     await waitFor(() => expect(screen.getByTestId('dashboard-list')).toBeInTheDocument());
     expect(screen.getByText('Sales Overview')).toBeInTheDocument();
     expect(screen.getByText('Marketing KPIs')).toBeInTheDocument();
@@ -89,7 +113,7 @@ describe('ConnectionPage — dashboard list', () => {
     renderPage();
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'bad-token');
-    await user.click(screen.getByRole('button', { name: /connect/i }));
+    await user.click(screen.getByRole('button', { name: /connect & fetch/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByText(/unauthorized/i)).toBeInTheDocument();
   });
@@ -103,7 +127,7 @@ describe('ConnectionPage — dashboard selection', () => {
   async function connectAndWait(user: ReturnType<typeof userEvent.setup>) {
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'token');
-    await user.click(screen.getByRole('button', { name: /connect/i }));
+    await user.click(screen.getByRole('button', { name: /connect & fetch/i }));
     await waitFor(() => screen.getByTestId('dashboard-list'));
   }
 
@@ -159,37 +183,14 @@ describe('ConnectionPage — dashboard selection', () => {
 });
 
 describe('ConnectionPage — state persistence', () => {
-  it('preserves the URL and token values after re-render', async () => {
-    vi.mocked(getDashboards).mockResolvedValue(mockDashboards);
-    const user = userEvent.setup();
-    const { rerender } = renderPage();
-    await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
-    await user.type(screen.getByLabelText(/api token/i), 'my-token');
-
-    rerender(
-      <MemoryRouter>
-        <ConnectionProvider>
-          <ConnectionPage />
-        </ConnectionProvider>
-      </MemoryRouter>,
-    );
-
-    // A new provider resets state — this confirms the inputs start empty
-    // (the persistence test is more meaningful in an integration/e2e context
-    // where the same provider instance survives navigation).
-    expect(screen.getByLabelText(/sisense url/i)).toBeInTheDocument();
-  });
-
   it('retains the dashboard list after a successful connect', async () => {
     vi.mocked(getDashboards).mockResolvedValue(mockDashboards);
     const user = userEvent.setup();
     renderPage();
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'token');
-    await user.click(screen.getByRole('button', { name: /connect/i }));
+    await user.click(screen.getByRole('button', { name: /connect & fetch/i }));
     await waitFor(() => screen.getByTestId('dashboard-list'));
-
-    // Dashboard list is still visible after re-render (context still holds data)
     expect(screen.getByText('Sales Overview')).toBeInTheDocument();
     expect(screen.getByText('Finance Report')).toBeInTheDocument();
   });

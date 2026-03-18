@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 
 const RULE_LABELS: Record<WellcheckViolation['rule'], string> = {
+  'syntax-error': 'Syntax / runtime error',
+  'no-undefined-variable': 'Undefined variable',
   'no-wrong-widget-type': 'Wrong widget type',
   'no-unimpactful-code': 'Unimpactful code',
   'no-metadata-override-in-script': 'Metadata override',

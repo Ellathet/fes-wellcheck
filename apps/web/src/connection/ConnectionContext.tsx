@@ -9,22 +9,26 @@ import {
 } from 'react';
 import { createClient, getDashboards } from '@wellcheck/sdk';
 import type { Dashboard, SisenseConfig } from '@wellcheck/sdk';
+import { parseDashboardFiles, type DashboardParseError } from '@/lib/parseDashboard';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type ConnectionMode = 'api' | 'file';
 export type ConnectionStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export interface ConnectionContextValue {
-  // Form fields — persisted across navigation
+  // Active mode
+  mode: ConnectionMode;
+  setMode: (mode: ConnectionMode) => void;
+
+  // API mode — form fields persisted across navigation
   baseUrl: string;
   token: string;
   setBaseUrl: (url: string) => void;
   setToken: (token: string) => void;
-
-  // Derived config (convenience)
   config: SisenseConfig;
 
-  // Fetched dashboards
+  // Shared state
   dashboards: Dashboard[];
   connectionStatus: ConnectionStatus;
   connectionError: string | null;
@@ -38,6 +42,7 @@ export interface ConnectionContextValue {
 
   // Actions
   connect: () => Promise<void>;
+  loadFromFiles: (files: File[]) => Promise<DashboardParseError[]>;
   reset: () => void;
 }
 
@@ -48,6 +53,7 @@ const ConnectionContext = createContext<ConnectionContextValue | null>(null);
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function ConnectionProvider({ children }: { children: ReactNode }) {
+  const [mode, setMode] = useState<ConnectionMode>('api');
   const [baseUrl, setBaseUrl] = useState('');
   const [token, setToken] = useState('');
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
@@ -55,9 +61,10 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [selectedOids, setSelectedOids] = useState<Set<string>>(new Set());
 
-  // Keep a stable ref to the latest config so connect() doesn't need it as a dep
   const configRef = useRef<SisenseConfig>({ baseUrl, token });
   configRef.current = { baseUrl: baseUrl.trim(), token: token.trim() };
+
+  // ─── API mode action ──────────────────────────────────────────────────────
 
   const connect = useCallback(async () => {
     setConnectionStatus('loading');
@@ -74,6 +81,34 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       setConnectionStatus('error');
     }
   }, []);
+
+  // ─── File mode action ─────────────────────────────────────────────────────
+
+  /**
+   * Parse uploaded files, load all resulting dashboards, and auto-select them.
+   * Returns any per-file parse errors so the UI can surface them.
+   */
+  const loadFromFiles = useCallback(async (files: File[]): Promise<DashboardParseError[]> => {
+    setConnectionStatus('loading');
+    setConnectionError(null);
+    setDashboards([]);
+    setSelectedOids(new Set());
+
+    const { dashboards: parsed, errors } = await parseDashboardFiles(files);
+
+    if (parsed.length === 0) {
+      setConnectionStatus('error');
+      setConnectionError('No valid dashboards found in the uploaded files.');
+    } else {
+      setDashboards(parsed);
+      setSelectedOids(new Set(parsed.map((d) => d.oid)));
+      setConnectionStatus('success');
+    }
+
+    return errors;
+  }, []);
+
+  // ─── Shared selection actions ─────────────────────────────────────────────
 
   const reset = useCallback(() => {
     setDashboards([]);
@@ -111,36 +146,19 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ConnectionContextValue>(
     () => ({
-      baseUrl,
-      token,
-      setBaseUrl,
-      setToken,
-      config,
-      dashboards,
-      connectionStatus,
-      connectionError,
-      selectedOids,
-      selectedDashboards,
-      toggleOid,
-      selectAll,
-      clearAll,
-      connect,
-      reset,
+      mode, setMode,
+      baseUrl, token, setBaseUrl, setToken, config,
+      dashboards, connectionStatus, connectionError,
+      selectedOids, selectedDashboards,
+      toggleOid, selectAll, clearAll,
+      connect, loadFromFiles, reset,
     }),
     [
-      baseUrl,
-      token,
-      config,
-      dashboards,
-      connectionStatus,
-      connectionError,
-      selectedOids,
-      selectedDashboards,
-      toggleOid,
-      selectAll,
-      clearAll,
-      connect,
-      reset,
+      mode, baseUrl, token, config,
+      dashboards, connectionStatus, connectionError,
+      selectedOids, selectedDashboards,
+      toggleOid, selectAll, clearAll,
+      connect, loadFromFiles, reset,
     ],
   );
 

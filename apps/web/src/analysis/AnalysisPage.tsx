@@ -19,7 +19,7 @@ import {
 
 export function AnalysisPage() {
   const navigate = useNavigate();
-  const { config, selectedDashboards } = useConnection();
+  const { config, mode, selectedDashboards } = useConnection();
   const { results, status, progress, error, run } = useAnalysis();
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function AnalysisPage() {
       navigate('/', { replace: true });
       return;
     }
-    run(selectedDashboards, config);
+    run(selectedDashboards, config, mode);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selectedDashboards.length && status === 'idle') return null;

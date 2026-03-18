@@ -1,6 +1,66 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeWidgetScript, analyzeDashboardScript } from './analyze';
 
+describe('analyzeWidgetScript — no-undefined-variable', () => {
+  it('flags a variable that is never declared anywhere in the script', () => {
+    const script = 'widget.on("processresult", function(se, ev) { breakby.indexOf("x"); });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable' && v.message.includes('"breakby"'))).toBe(true);
+  });
+
+  it('does not flag $$get — it is a Sisense utility global', () => {
+    const script = 'var item = se.metadata.panels[0].items[0]; var mask = $$get(item, "format.mask", {});';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable' && v.message.includes('"$$get"'))).toBe(false);
+  });
+
+  it('does not flag variables declared with var/let/const', () => {
+    const script = 'var total = 0; total += 1; console.log(total);';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable')).toBe(false);
+  });
+
+  it('does not flag function parameters', () => {
+    const script = 'args.result.forEach(function(row) { row.color = "red"; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable')).toBe(false);
+  });
+
+  it('does not flag arrow function parameters', () => {
+    const script = 'var found = args.result.find(el => el.value > 0);';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable')).toBe(false);
+  });
+
+  it('does not flag implicit globals (assignment without declaration)', () => {
+    const script = 'categories = ["A", "B"]; widget.title = categories[0];';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable')).toBe(false);
+  });
+
+  it('does not flag the identifier inside typeof (safe for undeclared vars)', () => {
+    const script = 'if (typeof undeclaredCheck !== "undefined") { console.log("ok"); }';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable' && v.message.includes('"undeclaredCheck"'))).toBe(false);
+  });
+
+  it('does not flag property keys as undefined variables', () => {
+    const script = 'var obj = { myKey: 1 }; console.log(obj.myProp);';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-undefined-variable' && v.message.includes('"myKey"'))).toBe(false);
+    expect(violations.some((v) => v.rule === 'no-undefined-variable' && v.message.includes('"myProp"'))).toBe(false);
+  });
+
+  it('flags severity as error (variable used inside a callback that is never invoked at top level)', () => {
+    // `breakby` is inside a callback — the runtime mock never calls it,
+    // so only the static AST check catches it.
+    const script = 'widget.on("processresult", function(se, ev) { breakby.indexOf("x"); });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    const v = violations.find((v) => v.rule === 'no-undefined-variable');
+    expect(v?.severity).toBe('error');
+  });
+});
+
 describe('analyzeWidgetScript — no-metadata-override-in-script', () => {
   it('flags widget.metadata access', () => {
     const script = 'widget.metadata.panels[0].items = [];';
@@ -43,34 +103,53 @@ describe('analyzeWidgetScript — no-metadata-override-in-script', () => {
 });
 
 describe('analyzeWidgetScript — no-wrong-widget-type', () => {
-  it('flags chart-specific API used in a pivot widget', () => {
-    const script = 'prism.setColor("red");';
+  it('flags chart-specific args.result used in a pivot widget', () => {
+    const script = 'args.result.forEach(function(r) { r.color = "red"; });';
     const violations = analyzeWidgetScript(script, 'pivot');
     expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
   });
 
-  it('flags pivot-specific API used in a chart widget', () => {
+  it('flags pivot-specific args.pivot used in a chart widget', () => {
     const script = 'console.log(args.pivot.rows);';
     const violations = analyzeWidgetScript(script, 'chart');
     expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
   });
 
-  it('flags indicator-specific API used in a chart widget', () => {
+  it('flags indicator-specific args.value used in a chart widget', () => {
     const script = 'var v = args.value;';
     const violations = analyzeWidgetScript(script, 'chart');
     expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
   });
 
-  it('does not flag chart API used in a chart widget', () => {
-    const script = 'prism.setColor("blue");';
+  it('does not flag args.result in a chart widget', () => {
+    const script = 'args.result.forEach(function(r) { r.color = "blue"; });';
     const violations = analyzeWidgetScript(script, 'chart');
     expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
   });
 
-  it('does not flag generic code in an unknown widget type', () => {
+  it('does not flag generic code in an unknown widget type (e.g. blox)', () => {
     const script = 'widget.title = widget.title.toUpperCase();';
-    const violations = analyzeWidgetScript(script, 'richtext');
+    const violations = analyzeWidgetScript(script, 'blox');
     expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+  });
+
+  it('does not flag prism — it is a Sisense global available to all widget types', () => {
+    const script = 'prism.setColor("red");';
+    expect(analyzeWidgetScript(script, 'pivot').some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+    expect(analyzeWidgetScript(script, 'chart').some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+    expect(analyzeWidgetScript(script, 'blox').some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+  });
+
+  it('does not flag $ (jQuery global bundled with Sisense)', () => {
+    const script = '$("#widget").hide();';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+  });
+
+  it('does not treat $ as a runtime error', () => {
+    const script = '$.ajax({ url: "/api" });';
+    const violations = analyzeWidgetScript(script, 'pivot');
+    expect(violations.some((v) => v.rule === 'syntax-error')).toBe(false);
   });
 });
 

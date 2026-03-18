@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { vi } from 'vitest';
 
 // Suppress console output produced by test scripts that call console.log/warn
 // as a side effect of the runtime-validation pass in analyze.ts.

@@ -3,6 +3,7 @@ import { createClient, getDashboard, getWidgets } from '@wellcheck/sdk';
 import type { Dashboard, SisenseConfig } from '@wellcheck/sdk';
 import { analyzeWidgetScript, analyzeDashboardScript } from '@/lib/analyze';
 import type { DashboardAnalysisResult } from '@/lib/analyze';
+import type { ConnectionMode } from '@/connection/ConnectionContext';
 
 export type AnalysisStatus = 'idle' | 'running' | 'done' | 'error';
 
@@ -11,7 +12,7 @@ export interface UseAnalysisResult {
   status: AnalysisStatus;
   progress: { current: number; total: number };
   error: string | null;
-  run: (dashboards: Dashboard[], config: SisenseConfig) => Promise<void>;
+  run: (dashboards: Dashboard[], config: SisenseConfig, mode: ConnectionMode) => Promise<void>;
 }
 
 export function useAnalysis(): UseAnalysisResult {
@@ -20,36 +21,48 @@ export function useAnalysis(): UseAnalysisResult {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
 
-  const run = useCallback(async (dashboards: Dashboard[], config: SisenseConfig) => {
+  const run = useCallback(async (
+    dashboards: Dashboard[],
+    config: SisenseConfig,
+    mode: ConnectionMode,
+  ) => {
     setStatus('running');
     setResults([]);
     setError(null);
     setProgress({ current: 0, total: dashboards.length });
 
-    const client = createClient(config);
+    const client = mode === 'api' ? createClient(config) : null;
     const analysisResults: DashboardAnalysisResult[] = [];
 
     try {
       for (let i = 0; i < dashboards.length; i++) {
-        const { oid, title } = dashboards[i]!;
+        const dashboard = dashboards[i]!;
         setProgress({ current: i + 1, total: dashboards.length });
 
-        // Fetch both in parallel — the full dashboard (for its script)
-        // and the widget list (for widget scripts).
-        const [fullDashboard, widgets] = await Promise.all([
-          getDashboard(client, oid),
-          getWidgets(client, oid),
-        ]);
+        let scriptSource: string | undefined;
+        let widgetList: Dashboard['widgets'];
 
-        const dashboardScript =
-          fullDashboard.script?.trim()
-            ? {
-                script: fullDashboard.script,
-                violations: analyzeDashboardScript(fullDashboard.script),
-              }
-            : undefined;
+        if (mode === 'file') {
+          // File mode — scripts and widgets are already embedded in the
+          // parsed Dashboard object; no network call needed.
+          scriptSource = dashboard.script;
+          widgetList = dashboard.widgets ?? [];
+        } else {
+          // API mode — fetch the full dashboard (for its script) and the
+          // widget list (for widget scripts) in parallel.
+          const [fullDashboard, widgets] = await Promise.all([
+            getDashboard(client!, dashboard.oid),
+            getWidgets(client!, dashboard.oid),
+          ]);
+          scriptSource = fullDashboard.script;
+          widgetList = widgets;
+        }
 
-        const widgetResults = widgets
+        const dashboardScript = scriptSource?.trim()
+          ? { script: scriptSource, violations: analyzeDashboardScript(scriptSource) }
+          : undefined;
+
+        const widgetResults = (widgetList ?? [])
           .filter((w) => Boolean(w.script?.trim()))
           .map((widget) => ({
             widgetOid: widget.oid,
@@ -60,8 +73,8 @@ export function useAnalysis(): UseAnalysisResult {
           }));
 
         analysisResults.push({
-          dashboardOid: oid,
-          dashboardTitle: title,
+          dashboardOid: dashboard.oid,
+          dashboardTitle: dashboard.title,
           dashboardScript,
           widgets: widgetResults,
         });

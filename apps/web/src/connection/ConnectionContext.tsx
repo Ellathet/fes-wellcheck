@@ -50,6 +50,7 @@ export interface ConnectionContextValue {
   // Actions
   connect: () => Promise<void>;
   loadFromFiles: (files: File[]) => Promise<DashboardParseError[]>;
+  appendFromFiles: (files: File[]) => Promise<DashboardParseError[]>;
   reset: () => void;
 }
 
@@ -132,6 +133,36 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
     return errors;
   }, []);
 
+  /**
+   * Parse additional files and merge the resulting dashboards into the
+   * existing set.  Already-loaded dashboards are preserved.  Duplicate OIDs
+   * are deduplicated (the incoming version wins).
+   */
+  const appendFromFiles = useCallback(async (files: File[]): Promise<DashboardParseError[]> => {
+    setConnectionStatus('loading');
+    setConnectionError(null);
+
+    const { dashboards: parsed, errors } = await parseDashboardFiles(files);
+
+    if (parsed.length > 0) {
+      setDashboards((prev) => {
+        const existingIds = new Set(prev.map((d) => d.oid));
+        const incoming = parsed.filter((d) => !existingIds.has(d.oid));
+        return [...prev, ...incoming];
+      });
+      setSelectedOids((prev) => {
+        const next = new Set(prev);
+        parsed.forEach((d) => next.add(d.oid));
+        return next;
+      });
+      setConnectionStatus('success');
+    } else {
+      setConnectionStatus('success');
+    }
+
+    return errors;
+  }, []);
+
   // ─── Shared selection actions ─────────────────────────────────────────────
 
   const reset = useCallback(() => {
@@ -176,7 +207,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       selectedOids, selectedDashboards,
       toggleOid, selectAll, clearAll,
       aiConfig, setAiConfig,
-      connect, loadFromFiles, reset,
+      connect, loadFromFiles, appendFromFiles, reset,
     }),
     [
       mode, baseUrl, token, config,
@@ -184,7 +215,7 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
       selectedOids, selectedDashboards,
       toggleOid, selectAll, clearAll,
       aiConfig, setAiConfig,
-      connect, loadFromFiles, reset,
+      connect, loadFromFiles, appendFromFiles, reset,
     ],
   );
 

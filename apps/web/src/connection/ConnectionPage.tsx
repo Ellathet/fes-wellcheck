@@ -26,7 +26,7 @@ export function ConnectionPage() {
     connectionStatus, connectionError,
     selectedOids, selectedDashboards,
     toggleOid, selectAll, clearAll,
-    connect, loadFromFiles, reset,
+    connect, loadFromFiles, appendFromFiles, reset,
   } = useConnection();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,9 +59,10 @@ export function ConnectionPage() {
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     const list = Array.from(files);
-    setPendingFiles(list);
+    setPendingFiles((prev) => [...prev, ...list]);
     setFileErrors([]);
-    const errors = await loadFromFiles(list);
+    const action = dashboards.length > 0 ? appendFromFiles : loadFromFiles;
+    const errors = await action(list);
     if (errors.length > 0) setFileErrors(errors.map((e) => e.message));
   }
 
@@ -199,7 +200,7 @@ export function ConnectionPage() {
               <CardTitle className="text-base">Upload dashboard files</CardTitle>
               <CardDescription>
                 Export your dashboards from Sisense and drop the <code>.dash</code> or{' '}
-                <code>.json</code> files here.
+                <code>.json</code> files here. You can upload as many files as you like.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -215,16 +216,20 @@ export function ConnectionPage() {
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
                 className={cn(
-                  'border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors',
+                  'border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
                   dragOver
                     ? 'border-primary bg-primary/5'
-                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/40',
+                    : isConnected
+                      ? 'border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/40'
+                      : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/40',
                 )}
               >
-                <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-                <p className="text-sm font-medium">Drop files here or click to browse</p>
+                <Upload className={cn('h-7 w-7 mx-auto mb-2', isConnected ? 'text-muted-foreground/50' : 'text-muted-foreground')} />
+                <p className="text-sm font-medium">
+                  {isConnected ? 'Drop more files to add dashboards' : 'Drop files here or click to browse'}
+                </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Accepts <code>.dash</code> and <code>.json</code> — multiple files supported
+                  Accepts <code>.dash</code> and <code>.json</code> — any number of files
                 </p>
                 <input
                   ref={fileInputRef}
@@ -232,16 +237,34 @@ export function ConnectionPage() {
                   accept=".dash,.json"
                   multiple
                   className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)}
+                  onChange={(e) => {
+                    handleFiles(e.target.files);
+                    // Reset so the same file can be re-added if needed
+                    e.target.value = '';
+                  }}
                 />
               </div>
 
-              {/* Selected file list */}
+              {/* Loaded files summary */}
               {pendingFiles.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Selected files
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Loaded files ({pendingFiles.length})
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingFiles([]);
+                        setFileErrors([]);
+                        reset();
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+                    >
+                      <X className="h-3 w-3" />
+                      Clear all
+                    </button>
+                  </div>
                   {pendingFiles.map((f, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
                       <FileJson className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -288,7 +311,12 @@ export function ConnectionPage() {
               {isConnected && (
                 <>
                   <Separator />
-                  <p className="text-sm font-medium">Select dashboards to analyse</p>
+                  <p className="text-sm font-medium">
+                    Select dashboards to analyse
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      ({dashboards.length} loaded)
+                    </span>
+                  </p>
                   <DashboardList
                     dashboards={dashboards}
                     selected={selectedOids}

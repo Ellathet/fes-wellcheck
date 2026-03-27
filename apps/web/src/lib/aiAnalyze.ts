@@ -16,6 +16,7 @@ export interface AiConfig {
 
 export interface AiViolation {
   severity: 'error' | 'warning' | 'info';
+  category: 'logic' | 'sisense-anti-pattern' | 'performance' | 'safety' | 'dead-code';
   message: string;
   suggestion?: string;
   line?: number;
@@ -38,31 +39,31 @@ export interface AiDashboardResult {
 
 export const AI_MODELS: Record<AiProvider, { id: string; label: string }[]> = {
   openai: [
-    { id: 'gpt-4o-mini', label: 'GPT-4o Mini (fast, cheap)' },
-    { id: 'gpt-4o', label: 'GPT-4o (best quality)' },
-    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'gpt-4.1-nano', label: 'GPT-4.1 Nano (fastest, cheapest)' },
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini (fast, cheap)' },
+    { id: 'gpt-4.1', label: 'GPT-4.1 (best quality)' },
   ],
   gemini: [
-    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (fast, cheap)' },
-    { id: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (best quality)' },
-    { id: 'gemini-2.0-flash-thinking-exp-01-21', label: 'Gemini 2.0 Flash Thinking' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (fastest, cheapest)' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (fast, cheap)' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (best quality)' },
   ],
 };
 
 export const DEFAULT_MODEL: Record<AiProvider, string> = {
-  openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash',
+  openai: 'gpt-4.1-mini',
+  gemini: 'gemini-2.5-flash',
 };
 
 // ─── Cost table ($ per 1M tokens) ────────────────────────────────────────────
 
 const COST_PER_M: Record<string, { input: number; output: number }> = {
-  'gpt-4o-mini':   { input: 0.15,  output: 0.60  },
-  'gpt-4o':        { input: 2.50,  output: 10.00 },
-  'gpt-4.1-mini':  { input: 0.40,  output: 1.60  },
-  'gemini-2.0-flash':                          { input: 0.075, output: 0.30  },
-  'gemini-1.5-pro':                            { input: 1.25,  output: 5.00  },
-  'gemini-2.0-flash-thinking-exp-01-21':       { input: 0,     output: 0     },
+  'gpt-4.1-nano':          { input: 0.10,  output: 0.40  },
+  'gpt-4.1-mini':          { input: 0.40,  output: 1.60  },
+  'gpt-4.1':               { input: 2.00,  output: 8.00  },
+  'gemini-2.5-flash-lite': { input: 0.10,  output: 0.40  },
+  'gemini-2.5-flash':      { input: 0.30,  output: 2.50  },
+  'gemini-2.5-pro':        { input: 1.25,  output: 10.00 },
 };
 
 // ─── Token estimation ─────────────────────────────────────────────────────────
@@ -120,28 +121,72 @@ function createModel(config: AiConfig) {
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a Sisense JavaScript script analyst.
-You review widget and dashboard scripts that run inside Sisense dashboards.
+const SYSTEM_PROMPT = `You are a Sisense JavaScript script analyst specialising in widget and dashboard scripts that run inside the Sisense BI platform.
 
-Sisense globals available in every script:
-- widget, args, dashboard, panel, prism (Sisense API)
-- $, jQuery (jQuery)
-- $$get, $$set, $$clone (Sisense helpers)
-- moment, _, Highcharts, d3 (bundled libraries)
+━━━ SISENSE RUNTIME ENVIRONMENT ━━━
+These scripts execute inside Sisense, NOT in a browser or Node.js standalone context.
+The following globals are ALWAYS injected by the Sisense runtime and must NEVER be flagged as undefined, undeclared, or missing an import:
 
-Your job: identify issues NOT already caught by static analysis.
-Focus on:
-1. Logic errors (e.g. wrong index, off-by-one, stale closures)
-2. Sisense-specific anti-patterns (modifying metadata/query via script, wrong widget-type API usage)
-3. Performance concerns (expensive operations in hot loops, redundant re-renders)
-4. Missing null/undefined guards that could throw at runtime
-5. Dead code or unreachable branches
+  widget      — the current Sisense widget instance
+  args        — event arguments (args.result, args.widget, args.dashboard, etc.)
+  dashboard   — the parent Sisense dashboard instance
+  panel       — the panel metadata object
+  prism       — the global Sisense application object
+  $, jQuery   — jQuery (bundled and injected by Sisense)
+  $$get, $$set, $$clone — Sisense utility helpers
+  moment      — date/time library
+  _           — Lodash/Underscore utility library
+  Highcharts  — charting library (available in chart-type widgets)
+  d3          — data visualisation library
 
-Respond ONLY with valid JSON in this exact shape:
+⚠️  Do NOT flag any of the above as "not defined", "missing import", "undeclared variable", or any similar generic JavaScript error. They are always present at runtime.
+
+━━━ YOUR JOB ━━━
+Identify issues NOT already caught by static analysis. Every violation must include a "category" field chosen from:
+  "logic" | "sisense-anti-pattern" | "performance" | "safety" | "dead-code"
+
+━━━ CATEGORIES IN DETAIL ━━━
+
+1. logic
+   Runtime logic errors: wrong index, off-by-one, stale closures, incorrect event handler registration, wrong conditional, etc.
+
+2. sisense-anti-pattern  ← USE THIS CATEGORY FOR ALL SISENSE-SPECIFIC VIOLATIONS
+   Scripts that mutate objects controlled by the Sisense panel UI cause unpredictable overwrites and data loss.
+   Flag ANY write to the following as severity "error":
+     • widget.metadata  or any sub-path  (e.g. widget.metadata.panels[0].items = [...])
+     • widget.rawQuery  or  widget.query
+     • widget.options.*  when modifying structural/data options (not cosmetic style)
+     • panel.*  properties written from inside a widget script
+   Flag widget-type mismatches as severity "warning":
+     • Highcharts API calls (widget.getHighchartsChart(), series manipulation) inside a pivot, indicator, or richtext script
+     • Pivot-specific APIs used inside a chart script
+
+   ✅ These are FINE — do NOT flag them:
+     args.result.forEach(row => { row.color = '#f00'; });   // result data manipulation
+     widget.style = { ... };                                 // cosmetic style override
+     widget.title = '...';                                   // title update
+
+   ❌ These must be flagged as sisense-anti-pattern:
+     widget.metadata.panels[0].items = [];    // metadata override
+     widget.rawQuery = "SELECT ...";          // query override
+     panel.items = [];                        // panel write
+
+3. performance
+   Expensive operations in hot paths: DOM queries inside beforerender loops, synchronous XHR, redundant widget.refresh() calls triggering re-render loops, etc.
+
+4. safety
+   Missing null/undefined guards that would throw at runtime, e.g. accessing args.result[0].value without checking args.result is non-empty.
+
+5. dead-code
+   Code with no observable effect: discarded map()/filter() return values, variables assigned but never read, unreachable branches, empty if/else blocks.
+
+━━━ RESPONSE FORMAT ━━━
+Respond ONLY with valid JSON in this exact shape — no markdown, no explanation outside the JSON:
 {
   "violations": [
     {
       "severity": "error" | "warning" | "info",
+      "category": "logic" | "sisense-anti-pattern" | "performance" | "safety" | "dead-code",
       "message": "<concise description of the issue>",
       "suggestion": "<optional: how to fix it>",
       "line": <optional: 1-based line number>

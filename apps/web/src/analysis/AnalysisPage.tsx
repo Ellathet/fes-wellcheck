@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { WidgetResult, DashboardScriptResult } from './WidgetResult';
 import { useAnalysis } from './useAnalysis';
 import { useAiAnalysis, formatCost } from './useAiAnalysis';
 import { useConnection } from '@/connection/ConnectionContext';
+import { useHistory } from '@/history/HistoryContext';
 import {
   ArrowLeft,
   ShieldCheck,
@@ -35,12 +36,17 @@ export function AnalysisPage() {
     computeEstimate,
     runAi,
   } = useAiAnalysis();
+  const { save } = useHistory();
+
+  // Stable ID for the current analysis run — assigned once on mount
+  const historyIdRef = useRef<string>(Date.now().toString());
 
   useEffect(() => {
     if (!selectedDashboards.length) {
       navigate('/', { replace: true });
       return;
     }
+    historyIdRef.current = Date.now().toString();
     run(selectedDashboards, config, mode);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,6 +56,32 @@ export function AnalysisPage() {
       computeEstimate(results, aiConfig.model);
     }
   }, [status, results, aiConfig.enabled, aiConfig.apiKey, aiConfig.model, computeEstimate]);
+
+  // Save to history when static analysis completes
+  useEffect(() => {
+    if (status === 'done' && results.length > 0) {
+      save({
+        id: historyIdRef.current,
+        timestamp: parseInt(historyIdRef.current, 10),
+        dashboardTitles: results.map((r) => r.dashboardTitle),
+        staticResults: results,
+        aiResults: [],
+      });
+    }
+  }, [status, results, save]);
+
+  // Update history entry when AI analysis completes
+  useEffect(() => {
+    if (aiStatus === 'done' && aiResults.length > 0 && results.length > 0) {
+      save({
+        id: historyIdRef.current,
+        timestamp: parseInt(historyIdRef.current, 10),
+        dashboardTitles: results.map((r) => r.dashboardTitle),
+        staticResults: results,
+        aiResults,
+      });
+    }
+  }, [aiStatus, aiResults, results, save]);
 
   if (!selectedDashboards.length && status === 'idle') return null;
 

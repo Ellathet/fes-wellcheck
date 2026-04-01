@@ -12,7 +12,7 @@ import { AiSettings } from './AiSettings';
 import { useConnection } from './ConnectionContext';
 import {
   ShieldCheck, AlertCircle, ArrowRight, Loader2,
-  Plug, Upload, FileJson, X,
+  Plug, Upload, FileJson, X, Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -130,7 +130,28 @@ export function ConnectionPage() {
               <CardTitle className="text-base">Connect to Sisense</CardTitle>
               <CardDescription>Enter your instance URL and API token to get started.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertTitle>CORS must be enabled in Sisense</AlertTitle>
+                <AlertDescription>
+                  Requests from this app are made directly from your browser, so your Sisense
+                  instance must allow cross-origin requests from{' '}
+                  <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">
+                    {window.location.origin}
+                  </span>
+                  .{' '}
+                  <a
+                    href="https://docs.sisense.com/main/SisenseLinux/cross-origin-resource-sharing.htm"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    How to enable CORS in Sisense →
+                  </a>
+                </AlertDescription>
+              </Alert>
+
               <form onSubmit={handleConnect} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="base-url">Sisense URL</Label>
@@ -168,7 +189,7 @@ export function ConnectionPage() {
               </form>
 
               {connectionStatus === 'error' && connectionError && (
-                <Alert variant="destructive" className="mt-4">
+                <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Connection failed</AlertTitle>
                   <AlertDescription>{connectionError}</AlertDescription>

@@ -114,8 +114,8 @@ describe('ConnectionPage — dashboard list (API mode)', () => {
     await user.type(screen.getByLabelText(/sisense url/i), 'https://example.com');
     await user.type(screen.getByLabelText(/api token/i), 'bad-token');
     await user.click(screen.getByRole('button', { name: /connect & fetch/i }));
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-    expect(screen.getByText(/unauthorized/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/unauthorized/i)).toBeInTheDocument());
+    expect(screen.getByText(/connection failed/i)).toBeInTheDocument();
   });
 });
 

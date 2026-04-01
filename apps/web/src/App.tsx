@@ -4,6 +4,7 @@ import { ConnectionPage } from '@/connection/ConnectionPage';
 import { AnalysisPage } from '@/analysis/AnalysisPage';
 import { HistoryProvider } from '@/history/HistoryContext';
 import { HistorySheet } from '@/history/HistorySheet';
+import { HistoryEntryPage } from '@/history/HistoryEntryPage';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<ConnectionPage />} />
             <Route path="/analysis" element={<AnalysisPage />} />
+            <Route path="/history/:id" element={<HistoryEntryPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <HistorySheet />

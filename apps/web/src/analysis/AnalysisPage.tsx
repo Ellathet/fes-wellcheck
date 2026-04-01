@@ -1,11 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { WidgetResult, DashboardScriptResult } from './WidgetResult';
+import { AnalysisResults } from './AnalysisResults';
 import { useAnalysis } from './useAnalysis';
 import { useAiAnalysis, formatCost } from './useAiAnalysis';
 import { useConnection } from '@/connection/ConnectionContext';
@@ -14,9 +12,7 @@ import {
   ArrowLeft,
   ShieldCheck,
   AlertCircle,
-  LayoutDashboard,
   Loader2,
-  CheckCircle2,
   Bot,
   Sparkles,
   Coins,
@@ -85,35 +81,12 @@ export function AnalysisPage() {
 
   if (!selectedDashboards.length && status === 'idle') return null;
 
-  const allViolations = [
-    ...results.flatMap((r) => r.dashboardScript?.violations ?? []),
-    ...results.flatMap((r) => r.widgets).flatMap((w) => w.violations),
-  ];
-  const totalViolations = allViolations.length;
-  const totalErrors = allViolations.filter((v) => v.severity === 'error').length;
-  const totalWarnings = totalViolations - totalErrors;
   const totalScripts =
     results.filter((r) => r.dashboardScript).length +
     results.flatMap((r) => r.widgets).length;
   const isStaticDone = status === 'done';
   const isAiRunning = aiStatus === 'running';
   const isAiDone = aiStatus === 'done';
-
-  // Helper: look up AI result for a given script
-  function getAiDashScript(dashOid: string) {
-    return aiResults.find((r) => r.dashboardOid === dashOid)?.dashboardScript;
-  }
-  function getAiWidgetResult(dashOid: string, widgetOid: string) {
-    return aiResults
-      .find((r) => r.dashboardOid === dashOid)
-      ?.widgets.find((w) => w.widgetOid === widgetOid)?.result;
-  }
-  function isAiLoadingScript(dashOid: string, widgetOid?: string) {
-    if (!isAiRunning) return false;
-    const dash = aiResults.find((r) => r.dashboardOid === dashOid);
-    if (!widgetOid) return !dash?.dashboardScript;
-    return !dash?.widgets.find((w) => w.widgetOid === widgetOid);
-  }
 
   const canRunAi =
     isStaticDone &&
@@ -151,30 +124,7 @@ export function AnalysisPage() {
           </div>
         )}
 
-        {/* Static summary */}
-        {isStaticDone && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3">
-            {totalViolations === 0 ? (
-              <span className="flex items-center gap-2 text-sm font-medium text-green-700">
-                <CheckCircle2 className="h-4 w-4" />
-                All clean — no issues found
-              </span>
-            ) : (
-              <>
-                <span className="text-sm text-muted-foreground">Found</span>
-                {totalErrors > 0 && (
-                  <Badge variant="destructive">{totalErrors} error{totalErrors !== 1 ? 's' : ''}</Badge>
-                )}
-                {totalWarnings > 0 && (
-                  <Badge variant="warning">{totalWarnings} warning{totalWarnings !== 1 ? 's' : ''}</Badge>
-                )}
-                <span className="text-sm text-muted-foreground">
-                  across {totalScripts} script{totalScripts !== 1 ? 's' : ''}
-                </span>
-              </>
-            )}
-          </div>
-        )}
+        {/* Static summary — shown once the first dashboard finishes */}
 
         {status === 'error' && error && (
           <Alert variant="destructive">
@@ -269,48 +219,11 @@ export function AnalysisPage() {
           </div>
         )}
 
-        {/* Results */}
-        {results.map((dashResult) => {
-          const scriptCount =
-            (dashResult.dashboardScript ? 1 : 0) + dashResult.widgets.length;
-          return (
-            <section key={dashResult.dashboardOid} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
-                <h2 className="font-medium text-sm">{dashResult.dashboardTitle}</h2>
-                <Badge variant="secondary" className="ml-auto">
-                  {scriptCount} script{scriptCount !== 1 ? 's' : ''}
-                </Badge>
-              </div>
-
-              {scriptCount === 0 ? (
-                <p className="text-sm text-muted-foreground pl-6">
-                  No scripts found in this dashboard.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {dashResult.dashboardScript && (
-                    <DashboardScriptResult
-                      result={dashResult.dashboardScript}
-                      aiResult={getAiDashScript(dashResult.dashboardOid)}
-                      aiLoading={isAiLoadingScript(dashResult.dashboardOid)}
-                    />
-                  )}
-                  {dashResult.widgets.map((widgetResult) => (
-                    <WidgetResult
-                      key={widgetResult.widgetOid}
-                      result={widgetResult}
-                      aiResult={getAiWidgetResult(dashResult.dashboardOid, widgetResult.widgetOid)}
-                      aiLoading={isAiLoadingScript(dashResult.dashboardOid, widgetResult.widgetOid)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              <Separator />
-            </section>
-          );
-        })}
+        <AnalysisResults
+          results={results}
+          aiResults={aiResults}
+          isAiRunning={isAiRunning}
+        />
       </div>
     </div>
   );

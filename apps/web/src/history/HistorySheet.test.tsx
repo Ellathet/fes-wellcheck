@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 import { HistoryProvider } from './HistoryContext';
 import { HistorySheet } from './HistorySheet';
 import type { HistoryEntry } from './useAnalysisHistory';
@@ -98,6 +104,7 @@ function renderSheet(seedEntries?: HistoryEntry[]) {
 
 beforeEach(() => {
   localStorage.clear();
+  mockNavigate.mockClear();
 });
 
 // ─── floating trigger ─────────────────────────────────────────────────────────
@@ -208,62 +215,25 @@ describe('HistorySheet — list view', () => {
   });
 });
 
-// ─── detail view ──────────────────────────────────────────────────────────────
+// ─── navigation on click ──────────────────────────────────────────────────────
 
-describe('HistorySheet — detail view', () => {
-  it('navigates to the detail view when an entry is clicked', async () => {
+describe('HistorySheet — navigation', () => {
+  it('navigates to /history/:id and closes the sheet when an entry is clicked', async () => {
     const user = userEvent.setup();
-    renderSheet([makeEntry({ dashboardTitles: ['Sales Overview'] })]);
-    await user.click(screen.getByRole('button', { name: /history/i }));
-    // Click the list-item button (the outer <button> wrapping each entry row)
-    await user.click(screen.getAllByText('Sales Overview')[0]!);
-    // Detail view header shows dashboard title in an <h3>
-    await waitFor(() =>
-      expect(screen.getAllByText('Sales Overview').length).toBeGreaterThanOrEqual(2),
-    );
-    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
-  });
-
-  it('renders widget results inside the detail view', async () => {
-    const user = userEvent.setup();
-    renderSheet([makeEntry()]);
+    renderSheet([makeEntry({ id: 'abc123', dashboardTitles: ['Sales Overview'] })]);
     await user.click(screen.getByRole('button', { name: /history/i }));
     await user.click(screen.getAllByText('Sales Overview')[0]!);
-    await waitFor(() => expect(screen.getByText('Revenue Chart')).toBeInTheDocument());
+    expect(mockNavigate).toHaveBeenCalledWith('/history/abc123');
   });
 
-  it('shows the violation message inside the detail view', async () => {
+  it('closes the sheet after navigation', async () => {
     const user = userEvent.setup();
-    renderSheet([makeEntryWithViolations()]);
-    await user.click(screen.getByRole('button', { name: /history/i }));
-    await user.click(screen.getAllByText('KPI Dashboard')[0]!);
-    await waitFor(() =>
-      expect(screen.getByText(/Script modifies "widget.metadata"/)).toBeInTheDocument(),
-    );
-  });
-
-  it('returns to the list view when the back button is clicked', async () => {
-    const user = userEvent.setup();
-    renderSheet([
-      makeEntry({ id: 'a', dashboardTitles: ['Alpha'] }),
-      makeEntry({ id: 'b', dashboardTitles: ['Beta'] }),
-    ]);
-    await user.click(screen.getByRole('button', { name: /history/i }));
-    await user.click(screen.getAllByText('Alpha')[0]!);
-    await user.click(screen.getByRole('button', { name: /go back/i }));
-    // Both entries are visible again in the list
-    expect(screen.getByText('Alpha')).toBeInTheDocument();
-    expect(screen.getByText('Beta')).toBeInTheDocument();
-  });
-
-  it('shows the entry timestamp in the detail view header', async () => {
-    const user = userEvent.setup();
-    const ts = new Date('2024-11-01T10:30:00').getTime();
-    renderSheet([makeEntry({ timestamp: ts })]);
+    renderSheet([makeEntry({ id: 'x' })]);
     await user.click(screen.getByRole('button', { name: /history/i }));
     await user.click(screen.getAllByText('Sales Overview')[0]!);
+    // Sheet closes — the dialog role should no longer be present
     await waitFor(() =>
-      expect(document.body.textContent).toMatch(/nov/i),
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
   });
 });

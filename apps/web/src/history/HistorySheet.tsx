@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Sheet,
   SheetContent,
@@ -8,16 +9,11 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { WidgetResult, DashboardScriptResult } from '@/analysis/WidgetResult';
 import { useHistory } from './HistoryContext';
 import type { HistoryEntry } from './useAnalysisHistory';
-import type { AiDashboardResult } from '@/analysis/useAiAnalysis';
 import {
   History,
-  ArrowLeft,
-  LayoutDashboard,
   Trash2,
   CheckCircle2,
   AlertTriangle,
@@ -47,20 +43,6 @@ function formatDate(timestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function getAiDashScript(aiResults: AiDashboardResult[], dashOid: string) {
-  return aiResults.find((r) => r.dashboardOid === dashOid)?.dashboardScript;
-}
-
-function getAiWidgetResult(
-  aiResults: AiDashboardResult[],
-  dashOid: string,
-  widgetOid: string,
-) {
-  return aiResults
-    .find((r) => r.dashboardOid === dashOid)
-    ?.widgets.find((w) => w.widgetOid === widgetOid)?.result;
 }
 
 // ─── Entry list item ──────────────────────────────────────────────────────────
@@ -139,89 +121,16 @@ function EntryListItem({
   );
 }
 
-// ─── Detail view ──────────────────────────────────────────────────────────────
-
-function EntryDetailView({
-  entry,
-  onBack,
-}: {
-  entry: HistoryEntry;
-  onBack: () => void;
-}) {
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 mb-4 shrink-0">
-        <Button variant="ghost" size="icon" aria-label="Go back" className="h-7 w-7" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">
-            {entry.dashboardTitles.join(', ')}
-          </p>
-          <p className="text-xs text-muted-foreground">{formatDate(entry.timestamp)}</p>
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1 -mx-6 px-6">
-        <div className="space-y-6 pb-6">
-          {entry.staticResults.map((dashResult) => {
-            const scriptCount =
-              (dashResult.dashboardScript ? 1 : 0) + dashResult.widgets.length;
-            return (
-              <section key={dashResult.dashboardOid} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <LayoutDashboard className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <h3 className="font-medium text-sm">{dashResult.dashboardTitle}</h3>
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    {scriptCount} script{scriptCount !== 1 ? 's' : ''}
-                  </Badge>
-                </div>
-
-                {scriptCount === 0 ? (
-                  <p className="text-sm text-muted-foreground pl-6">
-                    No scripts found in this dashboard.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {dashResult.dashboardScript && (
-                      <DashboardScriptResult
-                        result={dashResult.dashboardScript}
-                        aiResult={getAiDashScript(entry.aiResults, dashResult.dashboardOid)}
-                      />
-                    )}
-                    {dashResult.widgets.map((widgetResult) => (
-                      <WidgetResult
-                        key={widgetResult.widgetOid}
-                        result={widgetResult}
-                        aiResult={getAiWidgetResult(
-                          entry.aiResults,
-                          dashResult.dashboardOid,
-                          widgetResult.widgetOid,
-                        )}
-                      />
-                    ))}
-                  </div>
-                )}
-                <Separator />
-              </section>
-            );
-          })}
-        </div>
-      </ScrollArea>
-    </div>
-  );
-}
-
 // ─── Sheet + floating trigger ─────────────────────────────────────────────────
 
 export function HistorySheet() {
   const { entries, remove, clear } = useHistory();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<HistoryEntry | null>(null);
 
-  function handleOpenChange(next: boolean) {
-    setOpen(next);
-    if (!next) setSelectedEntry(null);
+  function handleSelect(entry: HistoryEntry) {
+    setOpen(false);
+    navigate(`/history/${entry.id}`);
   }
 
   return (
@@ -241,61 +150,52 @@ export function HistorySheet() {
         )}
       </button>
 
-      <Sheet open={open} onOpenChange={handleOpenChange}>
+      <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-6">
-          {selectedEntry ? (
-            <EntryDetailView
-              entry={selectedEntry}
-              onBack={() => setSelectedEntry(null)}
-            />
+          <SheetHeader className="shrink-0 mb-4">
+            <SheetTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Analysis History
+            </SheetTitle>
+            <SheetDescription>
+              {entries.length === 0
+                ? 'No past analyses yet.'
+                : `${entries.length} saved ${entries.length !== 1 ? 'analyses' : 'analysis'}`}
+            </SheetDescription>
+          </SheetHeader>
+
+          {entries.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-sm text-muted-foreground text-center">
+                Run an analysis to see it here.
+              </p>
+            </div>
           ) : (
             <>
-              <SheetHeader className="shrink-0 mb-4">
-                <SheetTitle className="flex items-center gap-2">
-                  <History className="h-5 w-5" />
-                  Analysis History
-                </SheetTitle>
-                <SheetDescription>
-                  {entries.length === 0
-                    ? 'No past analyses yet.'
-                    : `${entries.length} saved ${entries.length !== 1 ? 'analyses' : 'analysis'}`}
-                </SheetDescription>
-              </SheetHeader>
-
-              {entries.length === 0 ? (
-                <div className="flex flex-1 items-center justify-center">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Run an analysis to see it here.
-                  </p>
+              <ScrollArea className="flex-1 -mx-6 px-6">
+                <div className="space-y-2 pb-4">
+                  {entries.map((entry) => (
+                    <EntryListItem
+                      key={entry.id}
+                      entry={entry}
+                      onSelect={() => handleSelect(entry)}
+                      onRemove={() => remove(entry.id)}
+                    />
+                  ))}
                 </div>
-              ) : (
-                <>
-                  <ScrollArea className="flex-1 -mx-6 px-6">
-                    <div className="space-y-2 pb-4">
-                      {entries.map((entry) => (
-                        <EntryListItem
-                          key={entry.id}
-                          entry={entry}
-                          onSelect={() => setSelectedEntry(entry)}
-                          onRemove={() => remove(entry.id)}
-                        />
-                      ))}
-                    </div>
-                  </ScrollArea>
+              </ScrollArea>
 
-                  <div className="shrink-0 pt-3 border-t">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive gap-1.5 w-full"
-                      onClick={clear}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Clear all history
-                    </Button>
-                  </div>
-                </>
-              )}
+              <div className="shrink-0 pt-3 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive gap-1.5 w-full"
+                  onClick={clear}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Clear all history
+                </Button>
+              </div>
             </>
           )}
         </SheetContent>

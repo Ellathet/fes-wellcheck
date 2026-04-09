@@ -272,6 +272,217 @@ describe('script validation — runtime errors', () => {
   });
 });
 
+describe('analyzeWidgetScript — no-metadata-override-in-script (widget.options writes)', () => {
+  it('flags a direct widget.options property assignment', () => {
+    const script = 'widget.options.drillTarget = null;';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-metadata-override-in-script')).toBe(true);
+  });
+
+  it('flags a nested widget.options chain assignment', () => {
+    const script = 'widget.options.filters.panel = [];';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-metadata-override-in-script')).toBe(true);
+  });
+
+  it('does not flag reading widget.options', () => {
+    const script = 'var target = widget.options.drillTarget;';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-metadata-override-in-script')).toBe(false);
+  });
+
+  it('flags widget.options write as a warning (not error)', () => {
+    const script = 'widget.options.drillTarget = null;';
+    const violations = analyzeWidgetScript(script, 'chart');
+    const v = violations.find((v) => v.rule === 'no-metadata-override-in-script');
+    expect(v?.severity).toBe('warning');
+  });
+});
+
+describe('analyzeWidgetScript — no-unimpactful-code (discarded array-method results)', () => {
+  it('flags a discarded .filter() result', () => {
+    const script = 'args.result.filter(function(row) { return row.value > 0; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(true);
+  });
+
+  it('flags a discarded .map() result on a real array', () => {
+    const script = 'args.result.map(function(row) { return row.value; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(true);
+  });
+
+  it('flags a discarded .find() result', () => {
+    const script = 'args.result.find(function(row) { return row.value > 0; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(true);
+  });
+
+  it('flags a discarded .reduce() result', () => {
+    const script = 'args.result.reduce(function(acc, row) { return acc + row.value; }, 0);';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(true);
+  });
+
+  it('flags a discarded .findIndex() result', () => {
+    const script = 'args.result.findIndex(function(row) { return row.value > 100; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(true);
+  });
+
+  it('does not flag .filter() when result is assigned', () => {
+    const script = 'var filtered = args.result.filter(function(row) { return row.value > 0; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(false);
+  });
+
+  it('does not flag .forEach() — side-effect only, no meaningful return value', () => {
+    const script = 'args.result.forEach(function(row) { row.color = "red"; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unimpactful-code')).toBe(false);
+  });
+
+  it('discarded result violations are warnings', () => {
+    const script = 'args.result.filter(function(row) { return row.value > 0; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    const v = violations.find((v) => v.rule === 'no-unimpactful-code');
+    expect(v?.severity).toBe('warning');
+  });
+});
+
+describe('analyzeWidgetScript — no-wrong-widget-type (Highcharts in non-chart widgets)', () => {
+  it('flags Highcharts API access in a pivot widget', () => {
+    const script = 'var hc = Highcharts.chart("container", {});';
+    const violations = analyzeWidgetScript(script, 'pivot');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('flags Highcharts API access in an indicator widget', () => {
+    const script = 'Highcharts.setOptions({ lang: { thousandsSep: "," } });';
+    const violations = analyzeWidgetScript(script, 'indicator');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('flags Highcharts API access in a richtext widget', () => {
+    const script = 'var chart = new Highcharts.Chart({});';
+    const violations = analyzeWidgetScript(script, 'richtext');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('flags widget.getHighchartsChart() in a pivot widget', () => {
+    const script = 'var hc = widget.getHighchartsChart();';
+    const violations = analyzeWidgetScript(script, 'pivot');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('flags widget.getHighchartsChart() in an indicator widget', () => {
+    const script = 'widget.getHighchartsChart().series[0].update({});';
+    const violations = analyzeWidgetScript(script, 'indicator');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('does not flag Highcharts in a chart widget', () => {
+    const script = 'var hc = widget.getHighchartsChart(); hc.reflow();';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+  });
+
+  it('does not flag Highcharts in an unknown widget type — be conservative', () => {
+    const script = 'Highcharts.setOptions({});';
+    const violations = analyzeWidgetScript(script, 'blox');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+  });
+});
+
+describe('analyzeWidgetScript — no-unsafe-member-access (unguarded .find() result)', () => {
+  it('flags property access on an unguarded _.find() result variable', () => {
+    const script = [
+      'var seriesToModify = _.find(ev.result.series, function(s) { return s.name === "A"; });',
+      '_.each(seriesToModify.data, function(item) { item.y = 0; });',
+    ].join('\n');
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unsafe-member-access')).toBe(true);
+  });
+
+  it('flags property access on an unguarded Array.prototype.find() result variable', () => {
+    const script = [
+      'var row = args.result.find(function(r) { return r.value > 100; });',
+      'row.color = "red";',
+    ].join('\n');
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unsafe-member-access')).toBe(true);
+  });
+
+  it('does not flag when the find result is guarded by an if statement', () => {
+    const script = [
+      'var seriesToModify = _.find(ev.result.series, function(s) { return s.name === "A"; });',
+      'if (seriesToModify) { _.each(seriesToModify.data, function(item) { item.y = 0; }); }',
+    ].join('\n');
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unsafe-member-access')).toBe(false);
+  });
+
+  it('does not flag when the find result is guarded by && (short-circuit)', () => {
+    const script = [
+      'var row = args.result.find(function(r) { return r.value > 100; });',
+      'row && (row.color = "red");',
+    ].join('\n');
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unsafe-member-access')).toBe(false);
+  });
+
+  it('does not flag .filter() — filter always returns an array, never undefined', () => {
+    const script = [
+      'var rows = args.result.filter(function(r) { return r.value > 0; });',
+      'rows.forEach(function(r) { r.color = "blue"; });',
+    ].join('\n');
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-unsafe-member-access')).toBe(false);
+  });
+
+  it('flags with warning severity', () => {
+    const script = [
+      'var row = args.result.find(function(r) { return r.active; });',
+      'row.color = "red";',
+    ].join('\n');
+    const violations = analyzeWidgetScript(script, 'chart');
+    const v = violations.find((v) => v.rule === 'no-unsafe-member-access');
+    expect(v?.severity).toBe('warning');
+  });
+});
+
+describe('analyzeWidgetScript — no-wrong-widget-type (ev.result Highcharts config access)', () => {
+  it('flags ev.result.yAxis in a chart widget', () => {
+    const script = 'widget.on("processresult", function(se, ev) { ev.result.yAxis[0].reversed = true; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('flags ev.result.xAxis in a chart widget', () => {
+    const script = 'widget.on("processresult", function(se, ev) { ev.result.xAxis[0].categories = []; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('flags ev.result.plotOptions in a chart widget', () => {
+    const script = 'widget.on("processresult", function(se, ev) { ev.result.plotOptions.series.color = "red"; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(true);
+  });
+
+  it('does not flag ev.result.series — that is the valid data payload', () => {
+    const script = 'widget.on("processresult", function(se, ev) { ev.result.series[0].data = []; });';
+    const violations = analyzeWidgetScript(script, 'chart');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type')).toBe(false);
+  });
+
+  it('does not flag ev.result.yAxis in a non-chart widget (different context)', () => {
+    const script = 'widget.on("processresult", function(se, ev) { ev.result.yAxis[0].reversed = true; });';
+    const violations = analyzeWidgetScript(script, 'pivot');
+    expect(violations.some((v) => v.rule === 'no-wrong-widget-type' && v.message.includes('yAxis'))).toBe(false);
+  });
+});
+
 describe('analyzeWidgetScript — clean scripts', () => {
   it('returns no violations for an empty script', () => {
     expect(analyzeWidgetScript('', 'chart')).toHaveLength(0);

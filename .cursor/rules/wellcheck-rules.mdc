@@ -41,6 +41,54 @@ widget.metadata.panels[0].items = [];
 args.result.forEach(row => { row.color = '#ff0000'; });
 ```
 
+### 4. `no-unsafe-member-access`
+Widget scripts must guard against `undefined` before accessing properties on values returned by search functions.
+
+**Detect:** property access on variables assigned from `.find()` or `_.find()` when no null/undefined guard is present anywhere in the script.
+
+```javascript
+// ❌ BAD — _.find returns undefined when no match; accessing .data will throw
+var s = _.find(ev.result.series, function(s) { return s.name === 'Revenue'; });
+_.each(s.data, function(item) { item.y = 0; });
+
+// ✅ GOOD — guarded before access
+var s = _.find(ev.result.series, function(s) { return s.name === 'Revenue'; });
+if (s && s.data) { _.each(s.data, function(item) { item.y = 0; }); }
+```
+
+**Scope:** guard detection is script-wide (not flow-sensitive). A guard (`if (x)`, `x && …`) anywhere in the script suppresses the warning for that variable — this trades a small number of false negatives for zero false positives on correctly guarded code.
+
+**Severity:** `warning`
+
+### 5. `no-wrong-widget-type` — `ev.result` Highcharts config access
+In chart widget `processresult` handlers, `ev.result` contains the processed **data** payload (series arrays), not the Highcharts chart configuration. Properties like `yAxis`, `xAxis`, and `plotOptions` belong on the Highcharts options object, not on `ev.result`.
+
+**Detect:** access to `ev.result.yAxis`, `ev.result.xAxis`, `ev.result.plotOptions`, `ev.result.legend`, `ev.result.tooltip`, `ev.result.pane` in chart widget scripts.
+
+```javascript
+// ❌ BAD — ev.result is data, not the chart config
+widget.on('processresult', function(se, ev) {
+  ev.result.yAxis[0].reversed = true;  // runtime error — yAxis does not exist here
+});
+
+// ✅ GOOD — modify options before render
+widget.on('beforerender', function(se, ev) {
+  if (ev.options && ev.options.yAxis && ev.options.yAxis.length > 0) {
+    ev.options.yAxis[0].reversed = true;
+  }
+});
+
+// ✅ GOOD — update chart instance after render
+widget.on('domready', function(se, ev) {
+  var chart = widget.getHighchartsChart();
+  if (chart && chart.yAxis && chart.yAxis.length > 0) {
+    chart.yAxis[0].update({ reversed: true });
+  }
+});
+```
+
+**Applies to:** `chart` widget type only. **Severity:** `error`
+
 ## Adding a New Check
 
 1. Write a failing test with fixture scripts (pass/fail cases).

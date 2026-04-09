@@ -10,7 +10,8 @@ export interface WellcheckViolation {
     | 'no-undefined-variable'
     | 'no-wrong-widget-type'
     | 'no-unimpactful-code'
-    | 'no-metadata-override-in-script';
+    | 'no-metadata-override-in-script'
+    | 'no-unsafe-member-access';
   severity: 'error' | 'warning';
   message: string;
   line?: number;
@@ -347,6 +348,20 @@ function validateScriptRuntime(script: string): WellcheckViolation | null {
 
 // ─── Rule: no-metadata-override-in-script ────────────────────────────────────
 
+/**
+ * Returns true when node is a member-expression chain that starts with
+ * obj.prop (e.g. widget.options, widget.options.filters, widget.options.x.y).
+ */
+function startsWithChain(node: Node, obj: string, prop: string): boolean {
+  if (node.type !== 'MemberExpression') return false;
+  const mem = node as unknown as MemberExpression;
+  if (mem.computed) return false;
+  if (identName(mem.object as Node) === obj && identName(mem.property as Node) === prop) {
+    return true;
+  }
+  return startsWithChain(mem.object as Node, obj, prop);
+}
+
 function checkMetadataOverride(source: string, ast: acorn.Program): WellcheckViolation[] {
   const violations: WellcheckViolation[] = [];
   const BLOCKED_PROPS = new Set(['metadata', 'rawQuery', 'query']);
@@ -371,6 +386,8 @@ function checkMetadataOverride(source: string, ast: acorn.Program): WellcheckVio
     AssignmentExpression(node) {
       const n = node as unknown as AssignmentExpression;
       const left = n.left as Node;
+
+      // panel.* assignment
       if (
         left.type === 'MemberExpression' &&
         identName((left as unknown as MemberExpression).object as Node) === 'panel'
@@ -378,6 +395,15 @@ function checkMetadataOverride(source: string, ast: acorn.Program): WellcheckVio
         violations.push(violation(
           'no-metadata-override-in-script', 'error',
           'Script modifies a "panel" property via assignment. Panel structure should be managed through the Sisense UI.',
+          source, node as unknown as Node,
+        ));
+      }
+
+      // widget.options.* assignment — structural options belong in the panel UI
+      if (left.type === 'MemberExpression' && startsWithChain(left, 'widget', 'options')) {
+        violations.push(violation(
+          'no-metadata-override-in-script', 'warning',
+          'Script modifies "widget.options" via assignment. Structural options should be configured through the Sisense panel UI, not overridden in scripts.',
           source, node as unknown as Node,
         ));
       }
@@ -389,6 +415,11 @@ function checkMetadataOverride(source: string, ast: acorn.Program): WellcheckVio
 
 // ─── Rule: no-wrong-widget-type ───────────────────────────────────────────────
 
+// Widget types that are known to NOT use the Highcharts rendering engine.
+// chart/gauge/map widgets DO use Highcharts; unknown types (blox, custom, …)
+// get no flag — we err on the side of fewer false positives.
+const NON_HIGHCHARTS_WIDGET_TYPES = new Set(['pivot', 'indicator', 'richtext']);
+
 function checkWrongWidgetType(
   source: string,
   ast: acorn.Program,
@@ -396,6 +427,7 @@ function checkWrongWidgetType(
 ): WellcheckViolation[] {
   const violations: WellcheckViolation[] = [];
 
+  // args.* API mismatches
   for (const [type, apis] of Object.entries(WIDGET_APIS)) {
     if (type === widgetType) continue;
 
@@ -420,10 +452,83 @@ function checkWrongWidgetType(
     }
   }
 
+  // In chart widgets: ev.result contains processed data (series arrays), NOT
+  // the Highcharts options/config. Properties like yAxis, xAxis, plotOptions
+  // must be accessed via ev.options (beforerender) or widget.getHighchartsChart().
+  if (widgetType === 'chart') {
+    const HIGHCHARTS_OPTIONS_PROPS = new Set([
+      'yAxis', 'xAxis', 'plotOptions', 'legend', 'tooltip', 'pane',
+    ]);
+
+    walk.simple(ast, {
+      MemberExpression(node) {
+        const n = node as unknown as MemberExpression;
+        if (n.computed) return;
+        const prop = identName(n.property as Node);
+        if (!prop || !HIGHCHARTS_OPTIONS_PROPS.has(prop)) return;
+
+        // Check if object is ev.result (two-level chain)
+        if (
+          n.object.type === 'MemberExpression' &&
+          identName((n.object as unknown as MemberExpression).property as Node) === 'result' &&
+          identName((n.object as unknown as MemberExpression).object as Node) === 'ev'
+        ) {
+          violations.push(violation(
+            'no-wrong-widget-type', 'error',
+            `"ev.result.${prop}" is not valid — "ev.result" contains the processed data payload, not the Highcharts configuration. ` +
+            `Use "ev.options.${prop}" inside a "beforerender" handler, or "widget.getHighchartsChart().${prop}" in a "domready" handler.`,
+            source, node as unknown as Node,
+          ));
+        }
+      },
+    });
+  }
+
+  // Highcharts API used inside a non-chart widget
+  if (NON_HIGHCHARTS_WIDGET_TYPES.has(widgetType)) {
+    walk.simple(ast, {
+      // Highcharts.* — any access to the Highcharts namespace
+      MemberExpression(node) {
+        const n = node as unknown as MemberExpression;
+        if (!n.computed && identName(n.object as Node) === 'Highcharts') {
+          violations.push(violation(
+            'no-wrong-widget-type', 'error',
+            `"Highcharts" is a chart-specific API and cannot be used in a "${widgetType}" widget.`,
+            source, node as unknown as Node,
+          ));
+        }
+      },
+
+      // widget.getHighchartsChart() — chart-only method
+      CallExpression(node) {
+        const n = node as unknown as acorn.CallExpression;
+        if (
+          n.callee.type === 'MemberExpression' &&
+          identName((n.callee as unknown as MemberExpression).object as Node) === 'widget' &&
+          !(n.callee as unknown as MemberExpression).computed &&
+          identName((n.callee as unknown as MemberExpression).property as Node) === 'getHighchartsChart'
+        ) {
+          violations.push(violation(
+            'no-wrong-widget-type', 'error',
+            `"widget.getHighchartsChart()" is only available in chart widgets, not in a "${widgetType}" widget.`,
+            source, node as unknown as Node,
+          ));
+        }
+      },
+    });
+  }
+
   return violations;
 }
 
 // ─── Rule: no-unimpactful-code ────────────────────────────────────────────────
+
+// Methods that always produce a new value — discarding the return value is
+// almost certainly a bug (the caller forgot to assign or use the result).
+const RESULT_PRODUCING_METHODS = new Set([
+  'map', 'filter', 'find', 'findIndex', 'reduce', 'reduceRight',
+  'flat', 'flatMap', 'slice', 'concat',
+]);
 
 function checkUnimpactfulCode(source: string, ast: acorn.Program): WellcheckViolation[] {
   const violations: WellcheckViolation[] = [];
@@ -441,7 +546,7 @@ function checkUnimpactfulCode(source: string, ast: acorn.Program): WellcheckViol
       }
     },
 
-    // [].map(...)
+    // [].map(...) — mapping over an empty array literal is always a no-op
     CallExpression(node) {
       const n = node as unknown as acorn.CallExpression;
       if (
@@ -458,9 +563,10 @@ function checkUnimpactfulCode(source: string, ast: acorn.Program): WellcheckViol
       }
     },
 
-    // Standalone member-expression statement: `console.lo` (no call / assignment)
     ExpressionStatement(node) {
       const n = node as unknown as acorn.ExpressionStatement;
+
+      // Standalone member-expression: `console.lo` (no call / assignment)
       if (n.expression.type === 'MemberExpression') {
         const mem = n.expression as unknown as MemberExpression;
         const label = !mem.computed && identName(mem.property as Node)
@@ -472,6 +578,114 @@ function checkUnimpactfulCode(source: string, ast: acorn.Program): WellcheckViol
           source, node as unknown as Node,
         ));
       }
+
+      // Discarded result of a result-producing array method:
+      // `args.result.filter(fn)` without assigning the returned array is a bug.
+      if (n.expression.type === 'CallExpression') {
+        const call = n.expression as unknown as acorn.CallExpression;
+        if (call.callee.type === 'MemberExpression') {
+          const mem = call.callee as unknown as MemberExpression;
+          const methodName = !mem.computed ? identName(mem.property as Node) : null;
+          if (methodName && RESULT_PRODUCING_METHODS.has(methodName)) {
+            violations.push(violation(
+              'no-unimpactful-code', 'warning',
+              `The return value of ".${methodName}()" is discarded — assign it to a variable or the call has no effect.`,
+              source, node as unknown as Node,
+            ));
+          }
+        }
+      }
+    },
+  });
+
+  return violations;
+}
+
+// ─── Rule: no-unsafe-member-access ────────────────────────────────────────────
+//
+// Detects variables that are assigned from `.find()` or `_.find()` — both can
+// return `undefined` — and then have their properties accessed without any
+// null/undefined guard in the script.
+//
+// Limitation: the guard check is script-wide (not scope/flow sensitive).
+// A guard anywhere in the script suppresses the warning for that variable.
+// This trades a few false negatives for zero false positives on guarded code.
+
+function checkUnsafeMemberAccess(source: string, ast: acorn.Program): WellcheckViolation[] {
+  const violations: WellcheckViolation[] = [];
+
+  // Step 1 — Collect variables assigned from .find() or _.find().
+  // Both `_.find(arr, fn)` and `arr.find(fn)` are captured because both have
+  // a callee that is a MemberExpression whose property is `find`.
+  const findResultVars = new Set<string>();
+
+  walk.simple(ast, {
+    VariableDeclarator(node) {
+      const n = node as unknown as acorn.VariableDeclarator;
+      if (!n.init || n.init.type !== 'CallExpression') return;
+      if (n.id.type !== 'Identifier') return;
+      const call = n.init as unknown as acorn.CallExpression;
+      if (
+        call.callee.type === 'MemberExpression' &&
+        identName((call.callee as unknown as MemberExpression).property as Node) === 'find'
+      ) {
+        findResultVars.add((n.id as unknown as acorn.Identifier).name);
+      }
+    },
+  });
+
+  if (findResultVars.size === 0) return violations;
+
+  // Step 2 — Collect variable names that appear in guard positions
+  // (IfStatement test, ConditionalExpression test, LogicalExpression left-hand side).
+  // Any occurrence counts — this is the intentional conservative trade-off.
+  const guardedVars = new Set<string>();
+
+  const collectIdents = (node: Node) => {
+    walk.simple(node, {
+      Identifier(id) {
+        guardedVars.add((id as unknown as acorn.Identifier).name);
+      },
+    });
+  };
+
+  walk.simple(ast, {
+    IfStatement(node) {
+      collectIdents((node as unknown as acorn.IfStatement).test as unknown as Node);
+    },
+    ConditionalExpression(node) {
+      collectIdents((node as unknown as acorn.ConditionalExpression).test as unknown as Node);
+    },
+    LogicalExpression(node) {
+      const n = node as unknown as acorn.LogicalExpression;
+      // Only the left side of && / || / ?? acts as a guard for the right side.
+      collectIdents(n.left as unknown as Node);
+    },
+  });
+
+  // Step 3 — Flag member accesses on unguarded find-result variables.
+  // Track which (variable, property) pairs we have already reported to avoid
+  // duplicate violations when the same access appears multiple times.
+  const reported = new Set<string>();
+
+  walk.simple(ast, {
+    MemberExpression(node) {
+      const n = node as unknown as MemberExpression;
+      const objName = identName(n.object as Node);
+      if (!objName || !findResultVars.has(objName)) return;
+      if (guardedVars.has(objName)) return;
+
+      const propName = !n.computed ? (identName(n.property as Node) ?? '?') : '?';
+      const key = `${objName}.${propName}`;
+      if (reported.has(key)) return;
+      reported.add(key);
+
+      violations.push(violation(
+        'no-unsafe-member-access', 'warning',
+        `"${objName}" may be undefined — ".find()" returns undefined when no element matches. ` +
+        `Add a null check before accessing ".${propName}": if (${objName}) { ... }`,
+        source, node as unknown as Node,
+      ));
     },
   });
 
@@ -525,6 +739,7 @@ export function analyzeWidgetScript(script: string, widgetType: string): Wellche
     ...checkMetadataOverride(script, ast),
     ...checkWrongWidgetType(script, ast, widgetType),
     ...checkUnimpactfulCode(script, ast),
+    ...checkUnsafeMemberAccess(script, ast),
   ]);
 }
 

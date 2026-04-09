@@ -28,6 +28,7 @@ const RULE_LABELS: Record<WellcheckViolation['rule'], string> = {
   'no-wrong-widget-type': 'Wrong widget type',
   'no-unimpactful-code': 'Unimpactful code',
   'no-metadata-override-in-script': 'Metadata override',
+  'no-unsafe-member-access': 'Unsafe member access',
 };
 
 function ViolationRow({ violation }: { violation: WellcheckViolation }) {

@@ -116,7 +116,7 @@ function AiResultSection({ result, loading }: { result?: AiScriptResult; loading
       </div>
       <p className="flex items-center gap-1 text-[11px] text-muted-foreground/70 italic">
         <TriangleAlert className="h-3 w-3 shrink-0" />
-        AI results may not be 100% accurate — always review manually.
+        AI results may not be 100% accurate, always review manually.
       </p>
       {hasFindings ? (
         result.violations.map((v, i) => <AiViolationRow key={i} violation={v} />)

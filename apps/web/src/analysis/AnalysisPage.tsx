@@ -192,12 +192,17 @@ export function AnalysisPage() {
 
         {/* AI done summary */}
         {isAiDone && (
-          <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-            <Bot className="h-4 w-4 text-primary shrink-0" />
-            <span>
-              AI analysis complete ·{' '}
-              <span className="font-medium">{totalTokensUsed.toLocaleString()} tokens used</span>
-            </span>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm space-y-1">
+            <div className="flex items-center gap-3">
+              <Bot className="h-4 w-4 text-primary shrink-0" />
+              <span>
+                AI analysis complete ·{' '}
+                <span className="font-medium">{totalTokensUsed.toLocaleString()} tokens used</span>
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground pl-7">
+              AI findings are suggestions only and may not be 100% accurate. Always validate results before acting on them.
+            </p>
           </div>
         )}
 

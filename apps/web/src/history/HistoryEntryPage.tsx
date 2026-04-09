@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AnalysisResults } from '@/analysis/AnalysisResults';
 import { useHistory } from './HistoryContext';
-import { ArrowLeft, History, ShieldCheck, AlertCircle, Bot } from 'lucide-react';
+import { ArrowLeft, History, ShieldCheck, AlertCircle, Bot, TriangleAlert } from 'lucide-react';
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
@@ -70,9 +70,15 @@ export function HistoryEntryPage() {
 
         {/* AI results banner — shown when the stored entry includes AI results */}
         {entry.aiResults.length > 0 && (
-          <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-            <Bot className="h-4 w-4 text-primary shrink-0" />
-            <span>This analysis includes AI results.</span>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm space-y-1">
+            <div className="flex items-center gap-3">
+              <Bot className="h-4 w-4 text-primary shrink-0" />
+              <span>This analysis includes AI results.</span>
+            </div>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground pl-7">
+              <TriangleAlert className="h-3 w-3 shrink-0" />
+              AI findings are suggestions only and may not be 100% accurate. Always validate results before acting on them.
+            </p>
           </div>
         )}
 
